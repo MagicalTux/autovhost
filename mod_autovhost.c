@@ -171,6 +171,7 @@ static const char *autovhost_set_prefix(cmd_parms *cmd, void *dummy, const char 
 	}
 
 	conf->prefix = map;
+	return NULL;
 }
 
 static const command_rec autovhost_commands[] = {
