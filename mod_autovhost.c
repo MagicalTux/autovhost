@@ -147,6 +147,10 @@ void do_test(const char *host) {
 static int autovhost_translate(request_rec *r) {
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
+
+	// play with r here
+
+	return DECLINED; // do nothing
 }
 
 static void register_hooks(apr_pool_t *p) {
