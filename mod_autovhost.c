@@ -10,6 +10,7 @@
 #include "http_config.h"
 #include "http_core.h"
 #include "http_request.h"  /* for ap_hook_translate_name */
+#include "http_log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -148,7 +149,10 @@ static int autovhost_translate(request_rec *r) {
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
 
+	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "test: %s", ap_get_server_name(r));
+
 	// play with r here
+	// ap_get_server_name(r) <- server name
 
 	return DECLINED; // do nothing
 }
