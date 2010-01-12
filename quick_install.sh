@@ -7,5 +7,5 @@ if [ x"$APXS" = x ]; then
 	exit 1
 fi
 
-"$APXS" -i -a -Wc,--std=gnu99 -n autovhost -c mod_autovhost.c
+"$APXS" -i -a -Wc,-Wall -Wc,--std=gnu99 -n autovhost -c mod_autovhost.c
 
