@@ -51,11 +51,12 @@ bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char *ho
 	char tmp_buf[256];
 	char *tmp_ptr = (char*)&tmp_buf;
 	size_t prefix_len = strlen(prefix);
-	// transform in prefix+x/xy/buf/vhost. Final length: prefix+buf+vhost+6+NUL
-	int final_len = vhost_len + len + prefix_len + 7;
+	// transform in prefix/x/xy/buf/vhost. Final length: prefix+buf+vhost+7+NUL
+	int final_len = vhost_len + len + prefix_len + 8;
 	if (final_len > (sizeof(tmp_buf)-1)) return false;
 	if (final_len > (buf_len-1)) return false;
 	memcpy(tmp_ptr, prefix, prefix_len); tmp_ptr += prefix_len;
+	*(tmp_ptr++) = '/';
 	*(tmp_ptr++) = host[0];
 	*(tmp_ptr++) = '/';
 	*(tmp_ptr++) = host[0];
@@ -149,12 +150,20 @@ static int autovhost_translate(request_rec *r) {
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
 
-	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "test: %s", ap_get_server_name(r));
+	if (conf->prefix == NULL) return DECLINED;
+
+	char buf[256];
+	if (!scan_host(ap_get_server_name(r), conf->prefix, (char*)&buf, sizeof(buf)))
+		return DECLINED; // no result :(
+
+	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "test: %s prefix: %s uri: %s docroot: %s", ap_get_server_name(r), conf->prefix, r->uri, (char*)&buf);
+
+	r->canonical_filename = "";
+	r->filename = apr_pstrcat(r->pool, (char*)&buf, r->uri, NULL);
 
 	// play with r here
-	// ap_get_server_name(r) <- server name
 
-	return DECLINED; // do nothing
+	return OK; // do nothing
 }
 
 static void register_hooks(apr_pool_t *p) {
