@@ -3,6 +3,9 @@
 #include "apr_hooks.h"
 #include "apr_lib.h"
 
+/* BERK BERK BERK */
+#define CORE_PRIVATE
+
 #define APR_WANT_STRFUNC
 #include "apr_want.h"
 
@@ -11,6 +14,8 @@
 #include "http_core.h"
 #include "http_request.h"  /* for ap_hook_translate_name */
 #include "http_log.h"
+
+#include "http_config.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -146,24 +151,67 @@ void do_test(const char *host) {
 }
 #endif
 
+#define APACHE_SET_DIRECTIVE(_p, _dir, _args) do { \
+	(_p)->directive = _dir; \
+	(_p)->args = _args; \
+	(_p)->next = NULL; \
+	(_p)->first_child = NULL; \
+	(_p)->parent = NULL; \
+	(_p)->data = NULL; \
+	(_p)->filename = __FILE__; \
+	(_p)->line_num = __LINE__; \
+} while(0)
+
+#define PUSH_APACHE_CONFIG(_s, _pool, _dir, _args) do { \
+	ap_directive_t *x = apr_pcalloc(_pool, sizeof(ap_directive_t)); \
+	APACHE_SET_DIRECTIVE(x, _dir, _args); \
+	x->first_child = (_s)->first_child; \
+	x->parent = (_s)->parent; \
+	(_s) = x; \
+} while(0)
+
 static int autovhost_translate(request_rec *r) {
+	char buf[256];
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
 
 	if (conf->prefix == NULL) return DECLINED;
+	if (r->prev != NULL) return DECLINED; // do not touch (ie. waste time on already configured) subrequests
 
-	char buf[256];
 	if (!scan_host(ap_get_server_name(r), conf->prefix, (char*)&buf, sizeof(buf)))
 		return DECLINED; // no result :(
 
-	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "test: %s prefix: %s uri: %s docroot: %s", ap_get_server_name(r), conf->prefix, r->uri, (char*)&buf);
 
-	r->canonical_filename = "";
-	r->filename = apr_pstrcat(r->pool, (char*)&buf, r->uri, NULL);
+	// duplicate string and assign ap_document_root - YAY THIS IS DIRTYYYYYYYYYYYYY!
+	core_server_config *core_conf = ap_get_module_config(r->server->module_config, &core_module);
+	core_conf->ap_document_root = apr_pstrcat(r->pool, (char*)&buf, NULL);
 
-	// play with r here
+//	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test: %s prefix: %s uri: %s docroot: %s serverpath: %s", ap_get_server_name(r), conf->prefix, r->uri, (char*)&buf, r->server->path);
 
-	return OK; // do nothing
+	ap_directive_t *t = apr_pcalloc(r->pool, sizeof(ap_directive_t));
+
+	APACHE_SET_DIRECTIVE(t, "RewriteEngine", "on");
+	PUSH_APACHE_CONFIG(t, r->pool, "RewriteEngine", "on");
+	PUSH_APACHE_CONFIG(t, r->pool, "RewriteBase", "/");
+	PUSH_APACHE_CONFIG(t, r->pool, "php_admin_value", "SMTP BOO");
+
+	cmd_parms parms;
+	parms.pool = r->pool;
+	parms.temp_pool = r->pool;
+	parms.server = r->server;
+	parms.override = (RSRC_CONF | OR_ALL) & ~(OR_AUTHCFG | OR_LIMIT);
+	parms.override_opts = OPT_ALL | OPT_SYM_OWNER | OPT_MULTI;
+	parms.path = __FILE__;
+
+	if (r->per_dir_config == NULL) {
+		r->per_dir_config = ap_create_per_dir_config(r->pool);
+	}
+	const char *errmsg = ap_walk_config(t, &parms, r->per_dir_config);
+	if (errmsg != NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to merge config: %s", errmsg);
+	}
+
+	return DECLINED;
 }
 
 static void register_hooks(apr_pool_t *p) {
