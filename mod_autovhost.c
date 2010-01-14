@@ -2,7 +2,6 @@
 #include "apr_strings.h"
 #include "apr_hooks.h"
 #include "apr_lib.h"
-#include <sys/time.h>
 
 /* we are about to rape http_core. Let's get it undressed first */
 #define CORE_PRIVATE
@@ -350,31 +349,31 @@ static int autovhost_log(request_rec *r) {
 	n.pool = r->pool;
 	n.table = data_table;
 
-	struct timeval tv;
-	if (gettimeofday(&tv, NULL) != -1) {
-		apr_table_addn(data_table, "tv_sec", apr_ltoa(r->pool, tv.tv_sec));
-		apr_table_addn(data_table, "tv_usec", apr_ltoa(r->pool, tv.tv_usec));
-	}
-	apr_table_addn(data_table, "host", apr_table_get(r->notes, "autovhost_host"));
-	apr_table_addn(data_table, "vhost", apr_table_get(r->notes, "autovhost_vhost"));
-	apr_table_addn(data_table, "remote_ip", r->connection->remote_ip);
-	apr_table_addn(data_table, "local_ip", r->connection->local_ip);
-	apr_table_addn(data_table, "local_port", apr_itoa(r->pool, r->connection->local_addr->port));
-	apr_table_addn(data_table, "remote_logname", ap_get_remote_logname(r));
-	apr_table_addn(data_table, "user", r->user);
+	request_rec *orig = r;
+	while(orig->prev) orig = orig->prev;
+	while(r->next) r = r->next;
+
+	apr_table_addn(data_table, "now", apr_ltoa(r->pool, apr_time_now()));
+	apr_table_addn(data_table, "host", apr_table_get(orig->notes, "autovhost_host"));
+	apr_table_addn(data_table, "vhost", apr_table_get(orig->notes, "autovhost_vhost"));
+	apr_table_addn(data_table, "remote_ip", orig->connection->remote_ip);
+	apr_table_addn(data_table, "local_ip", orig->connection->local_ip);
+	apr_table_addn(data_table, "local_port", apr_itoa(r->pool, orig->connection->local_addr->port));
+	apr_table_addn(data_table, "remote_logname", ap_get_remote_logname(orig));
+	apr_table_addn(data_table, "user", orig->user);
 	if (r->parsed_uri.password) {
-		apr_table_addn(data_table, "request", apr_pstrcat(r->pool, r->method, " ", apr_uri_unparse(r->pool, &r->parsed_uri, 0), r->assbackwards ? NULL : " ", r->protocol, NULL));
+		apr_table_addn(data_table, "request", apr_pstrcat(r->pool, orig->method, " ", apr_uri_unparse(r->pool, &orig->parsed_uri, 0), orig->assbackwards ? NULL : " ", orig->protocol, NULL));
 	} else {
-		apr_table_addn(data_table, "request", r->the_request);
+		apr_table_addn(data_table, "request", orig->the_request);
 	}
-	apr_table_addn(data_table, "filename", r->filename);
-	apr_table_addn(data_table, "uri", r->uri);
-	apr_table_addn(data_table, "method", r->method);
-	apr_table_addn(data_table, "protocol", r->protocol);
-	apr_table_addn(data_table, "query", r->args);
+	apr_table_addn(data_table, "filename", r->filename); // we want "last" filename, as original one will be flawed if we got an internal redirect
+	apr_table_addn(data_table, "uri", orig->uri);
+	apr_table_addn(data_table, "method", orig->method);
+	apr_table_addn(data_table, "protocol", orig->protocol);
+	apr_table_addn(data_table, "query", orig->args);
 	apr_table_addn(data_table, "status", apr_itoa(r->pool, r->status));
 	apr_table_addn(data_table, "bytes_sent", apr_ltoa(r->pool, r->bytes_sent));
-	apr_table_addn(data_table, "request_start", apr_ltoa(r->pool, r->request_time));
+	apr_table_addn(data_table, "request_start", apr_ltoa(r->pool, orig->request_time)); // contains time()*1000000+microtime
 	apr_table_do(append_received_headers, &n, r->headers_in, NULL);
 	apr_table_do(append_sent_headers, &n, r->headers_out, NULL);
 
