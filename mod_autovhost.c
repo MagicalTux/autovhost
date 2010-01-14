@@ -2,6 +2,7 @@
 #include "apr_strings.h"
 #include "apr_hooks.h"
 #include "apr_lib.h"
+#include <sys/time.h>
 
 /* we are about to rape http_core. Let's get it undressed first */
 #define CORE_PRIVATE
@@ -265,8 +266,12 @@ static int autovhost_translate(request_rec *r) {
 		r->per_dir_config = ap_create_per_dir_config(r->pool);
 	}
 
+	// store some notes
+	apr_table_addn(r->notes, "autovhost_host", info->host);
+	apr_table_addn(r->notes, "autovhost_vhost", info->vhost);
+
 	// Fake some input headers to make us look better (DIRTY BIS)
-	apr_table_add(r->headers_in, "X-VHost-Info", apr_pstrcat(r->pool, info->host, "/", info->vhost, NULL));
+	apr_table_addn(r->headers_in, "X-VHost-Info", apr_pstrcat(r->pool, info->host, "/", info->vhost, NULL));
 
 	// Configure apache options/etc (we made sure apache was nude with #define CORE_PRIVATE, now let's grop those privates)
 	char *tmp = apr_pstrcat(r->pool, "doc_root \"", ap_escape_quotes(r->pool, core_conf->ap_document_root), "\"", NULL);
@@ -280,6 +285,54 @@ static int autovhost_translate(request_rec *r) {
 	return DECLINED; /* we played with the config, but let apache continue processing normally, with the new informations we are providing */
 }
 
+struct lots_of_infos_for_make_table {
+	int len;
+	apr_pool_t *pool;
+	apr_table_t *table;
+	char *buf;
+	int pos;
+};
+
+int make_table_escape_uri(void *rec, const char *key, const char *value) {
+	struct lots_of_infos_for_make_table *info = (struct lots_of_infos_for_make_table*)rec;
+	if (value == NULL) return 1; // skip empty/null stuff
+	char *new_key = escape_uri(info->pool, key);
+	char *new_value = escape_uri(info->pool, value);
+	apr_table_addn(info->table, new_key, new_value);
+	info->len += strlen(new_key)+strlen(new_value)+2; // "&" and "="
+	return -1;
+}
+
+int build_final_buffer_for_table(void *rec, const char *key, const char *value) {
+	struct lots_of_infos_for_make_table *info = (struct lots_of_infos_for_make_table*)rec;
+	if (info->buf == NULL) {
+		info->buf = apr_pcalloc(info->pool, info->len+1); // +1 = NUL
+	}
+	if (info->pos > 0) {
+		info->buf[info->pos] = '&'; info->pos++;
+	}
+	int len = strlen(key);
+	memcpy(info->buf + info->pos, key, len); info->pos += len;
+	info->buf[info->pos] = '='; info->pos++;
+	len = strlen(value);
+	memcpy(info->buf + info->pos, value, len); info->pos += len;
+	return -1;
+}
+
+static int append_received_headers(void *rec, const char *key, const char *value) {
+	struct lots_of_infos_for_make_table *info = (struct lots_of_infos_for_make_table*)rec;
+	char *real_key = apr_pstrcat(info->pool, "headers_in[", key, "][]", NULL);
+	apr_table_addn(info->table, real_key, value);
+	return -1;
+}
+
+static int append_sent_headers(void *rec, const char *key, const char *value) {
+	struct lots_of_infos_for_make_table *info = (struct lots_of_infos_for_make_table*)rec;
+	char *real_key = apr_pstrcat(info->pool, "headers_out[", key, "][]", NULL);
+	apr_table_addn(info->table, real_key, value);
+	return -1;
+}
+
 static int autovhost_log(request_rec *r) {
 	// combined format: "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"
 	// %h: remote host
@@ -291,7 +344,52 @@ static int autovhost_log(request_rec *r) {
 	// %b: Size of response in bytes, excluding HTTP headers. In CLF format, i.e. a '-' rather than a 0 when no bytes are sent
 	//
 	// Going to send this in a more parsing friendly format
-//	char *logdata = apr_psprintf(r->pool, "%s", r->connection->remote_ip
+	
+	apr_table_t *data_table = apr_table_make(r->pool, 8);
+	struct lots_of_infos_for_make_table n;
+	n.pool = r->pool;
+	n.table = data_table;
+
+	struct timeval tv;
+	if (gettimeofday(&tv, NULL) != -1) {
+		apr_table_addn(data_table, "tv_sec", apr_ltoa(r->pool, tv.tv_sec));
+		apr_table_addn(data_table, "tv_usec", apr_ltoa(r->pool, tv.tv_usec));
+	}
+	apr_table_addn(data_table, "host", apr_table_get(r->notes, "autovhost_host"));
+	apr_table_addn(data_table, "vhost", apr_table_get(r->notes, "autovhost_vhost"));
+	apr_table_addn(data_table, "remote_ip", r->connection->remote_ip);
+	apr_table_addn(data_table, "local_ip", r->connection->local_ip);
+	apr_table_addn(data_table, "local_port", apr_itoa(r->pool, r->connection->local_addr->port));
+	apr_table_addn(data_table, "remote_logname", ap_get_remote_logname(r));
+	apr_table_addn(data_table, "user", r->user);
+	if (r->parsed_uri.password) {
+		apr_table_addn(data_table, "request", apr_pstrcat(r->pool, r->method, " ", apr_uri_unparse(r->pool, &r->parsed_uri, 0), r->assbackwards ? NULL : " ", r->protocol, NULL));
+	} else {
+		apr_table_addn(data_table, "request", r->the_request);
+	}
+	apr_table_addn(data_table, "filename", r->filename);
+	apr_table_addn(data_table, "uri", r->uri);
+	apr_table_addn(data_table, "method", r->method);
+	apr_table_addn(data_table, "protocol", r->protocol);
+	apr_table_addn(data_table, "query", r->args);
+	apr_table_addn(data_table, "status", apr_itoa(r->pool, r->status));
+	apr_table_addn(data_table, "bytes_sent", apr_ltoa(r->pool, r->bytes_sent));
+	apr_table_addn(data_table, "request_start", apr_ltoa(r->pool, r->request_time));
+	apr_table_do(append_received_headers, &n, r->headers_in, NULL);
+	apr_table_do(append_sent_headers, &n, r->headers_out, NULL);
+
+	// urlencode data in a new table
+	apr_table_t *data_table_esc = apr_table_make(r->pool, 8);
+	n.len = 0;
+	n.table = data_table_esc;
+	n.buf = NULL;
+	n.pos = 0;
+
+	apr_table_do(make_table_escape_uri, &n, data_table, NULL);
+	apr_table_do(build_final_buffer_for_table, &n, data_table_esc, NULL);
+
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Estimated len: %d - string: %s", n.len, n.buf);
+
 	return OK;
 }
 
