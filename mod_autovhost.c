@@ -3,7 +3,7 @@
 #include "apr_hooks.h"
 #include "apr_lib.h"
 
-/* BERK BERK BERK */
+/* we are about to rape http_core. Let's get it undressed first */
 #define CORE_PRIVATE
 
 #define APR_WANT_STRFUNC
@@ -170,6 +170,16 @@ void do_test(const char *host) {
 	(_s) = x; \
 } while(0)
 
+#define PUSH_APACHE_DIRECTIVE(_dir, _args) do { \
+	APACHE_SET_DIRECTIVE(t, _dir, _args); \
+	const char *errmsg = ap_walk_config(t, &parms, r->per_dir_config); \
+	if (errmsg != NULL) { \
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to merge config: %s", errmsg); \
+	} \
+} while(0)
+
+//	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test: %s prefix: %s uri: %s docroot: %s serverpath: %s", ap_get_server_name(r), conf->prefix, r->uri, (char*)&buf, r->server->path);
+
 static int autovhost_translate(request_rec *r) {
 	char buf[256];
 	autovhost_sconf_t *conf;
@@ -186,15 +196,8 @@ static int autovhost_translate(request_rec *r) {
 	core_server_config *core_conf = ap_get_module_config(r->server->module_config, &core_module);
 	core_conf->ap_document_root = apr_pstrcat(r->pool, (char*)&buf, NULL);
 
-//	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test: %s prefix: %s uri: %s docroot: %s serverpath: %s", ap_get_server_name(r), conf->prefix, r->uri, (char*)&buf, r->server->path);
-
+	// prepare stuff to be able to push directives on Apache
 	ap_directive_t *t = apr_pcalloc(r->pool, sizeof(ap_directive_t));
-
-	APACHE_SET_DIRECTIVE(t, "RewriteEngine", "on");
-	PUSH_APACHE_CONFIG(t, r->pool, "RewriteEngine", "on");
-	PUSH_APACHE_CONFIG(t, r->pool, "RewriteBase", "/");
-	PUSH_APACHE_CONFIG(t, r->pool, "php_admin_value", "SMTP BOO");
-
 	cmd_parms parms;
 	parms.pool = r->pool;
 	parms.temp_pool = r->pool;
@@ -202,14 +205,13 @@ static int autovhost_translate(request_rec *r) {
 	parms.override = (RSRC_CONF | OR_ALL) & ~(OR_AUTHCFG | OR_LIMIT);
 	parms.override_opts = OPT_ALL | OPT_SYM_OWNER | OPT_MULTI;
 	parms.path = __FILE__;
-
 	if (r->per_dir_config == NULL) {
 		r->per_dir_config = ap_create_per_dir_config(r->pool);
 	}
-	const char *errmsg = ap_walk_config(t, &parms, r->per_dir_config);
-	if (errmsg != NULL) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to merge config: %s", errmsg);
-	}
+
+	PUSH_APACHE_DIRECTIVE("php_admin_value", "SMTP BOO");
+	char *tmp = apr_pstrcat(r->pool, "doc_root ", core_conf->ap_document_root, NULL);
+	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
 
 	return DECLINED;
 }
