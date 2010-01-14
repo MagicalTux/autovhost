@@ -13,6 +13,7 @@
 #include "http_config.h"
 #include "http_core.h"
 #include "http_request.h"  /* for ap_hook_translate_name */
+#include "http_protocol.h" /* for ap_hook_log_transaction */
 #include "http_log.h"
 
 #include "http_config.h"
@@ -37,6 +38,46 @@ struct autovhost_info {
 	char *vhost;
 	char *basepath;
 };
+
+static const char c2x_table[] = "0123456789abcdef";
+
+static APR_INLINE unsigned char *c2x(unsigned what, unsigned char prefix,
+		unsigned char *where)
+{
+#if APR_CHARSET_EBCDIC
+	what = apr_xlate_conv_byte(ap_hdrs_to_ascii, (unsigned char)what);
+#endif /*APR_CHARSET_EBCDIC*/
+	*where++ = prefix;
+	*where++ = c2x_table[what >> 4];
+	*where++ = c2x_table[what & 0xf];
+	return where;
+}
+
+/*
+ * Escapes a uri in a similar way as php's urlencode does.
+ * Based on ap_os_escape_path in server/util.c
+ */
+static char *escape_uri(apr_pool_t *p, const char *path) {
+	char *copy = apr_palloc(p, 3 * strlen(path) + 3);
+	const unsigned char *s = (const unsigned char *)path;
+	unsigned char *d = (unsigned char *)copy;
+	unsigned c;
+
+	while ((c = *s)) {
+		if (apr_isalnum(c) || c == '_') {
+			*d++ = c;
+		}
+		else if (c == ' ') {
+			*d++ = '+';
+		}
+		else {
+			d = c2x(c, '%', d);
+		}
+		++s;
+	}
+	*d = '\0';
+	return copy;
+}
 
 static void *autovhost_create_server_config(apr_pool_t *p, server_rec *s) {
 	autovhost_sconf_t *conf;
@@ -227,18 +268,37 @@ static int autovhost_translate(request_rec *r) {
 	// Fake some input headers to make us look better (DIRTY BIS)
 	apr_table_add(r->headers_in, "X-VHost-Info", apr_pstrcat(r->pool, info->host, "/", info->vhost, NULL));
 
-	// Configure apache options/etc (we made sure apache was nude with #define CORE_PRIVATE, now let's touch those privates)
-	PUSH_APACHE_DIRECTIVE("php_admin_value", "SMTP BOO");
-	char *tmp = apr_pstrcat(r->pool, "doc_root ", core_conf->ap_document_root, NULL);
+	// Configure apache options/etc (we made sure apache was nude with #define CORE_PRIVATE, now let's grop those privates)
+	char *tmp = apr_pstrcat(r->pool, "doc_root \"", ap_escape_quotes(r->pool, core_conf->ap_document_root), "\"", NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
-	PUSH_APACHE_DIRECTIVE("Options", "-Indexes"); // doesn't work
+	tmp = apr_pstrcat(r->pool, "open_basedir \"/tmp/:/usr/share/fonts/php/:/dev/urandom:/proc/loadavg:/www/pear:/www/zend:", ap_escape_quotes(r->pool, info->basepath), "/\"", NULL);
+	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
+	tmp = apr_pstrcat(r->pool, "session.save_path \"", ap_escape_quotes(r->pool, info->basepath), "/sessions\"", NULL);
+	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
+//	PUSH_APACHE_DIRECTIVE("Options", "-Indexes");
 
 	return DECLINED; /* we played with the config, but let apache continue processing normally, with the new informations we are providing */
+}
+
+static int autovhost_log(request_rec *r) {
+	// combined format: "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"
+	// %h: remote host
+	// %l: Remote logname (from identd, if supplied). This will return a dash unless mod_ident is present and IdentityCheck is set On.
+	// %u: Remote user (from auth; may be bogus if return status (%s) is 401)
+	// %t: Time the request was received (standard english format)
+	// %r: First line of request
+	// %>s: Status. For requests that got internally redirected, this is the status of the *original* request --- %>s for the last.
+	// %b: Size of response in bytes, excluding HTTP headers. In CLF format, i.e. a '-' rather than a 0 when no bytes are sent
+	//
+	// Going to send this in a more parsing friendly format
+//	char *logdata = apr_psprintf(r->pool, "%s", r->connection->remote_ip
+	return OK;
 }
 
 static void register_hooks(apr_pool_t *p) {
 	static const char * const aszPre[]={ "mod_alias.c","mod_userdir.c",NULL };
 	ap_hook_translate_name(autovhost_translate, aszPre, NULL, APR_HOOK_MIDDLE);
+	ap_hook_log_transaction(autovhost_log,NULL,NULL,APR_HOOK_MIDDLE);
 }
 
 static const char *autovhost_set_prefix(cmd_parms *cmd, void *dummy, const char *map) {
