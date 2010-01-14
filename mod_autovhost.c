@@ -31,6 +31,13 @@ typedef struct autovhost_sconf_t {
 	const char *prefix;
 } autovhost_sconf_t;
 
+struct autovhost_info {
+	apr_pool_t *pool;
+	char *host;
+	char *vhost;
+	char *basepath;
+};
+
 static void *autovhost_create_server_config(apr_pool_t *p, server_rec *s) {
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)apr_pcalloc(p, sizeof(autovhost_sconf_t));
@@ -52,14 +59,13 @@ static void *autovhost_merge_server_config(apr_pool_t *p, void *parentv, void *c
 	return conf;
 }
 
-bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char *host, size_t len, char *buf, size_t buf_len) {
+bool test_path(const char *prefix, const char *vhost, size_t vhost_len, const char *host, size_t len, struct autovhost_info *info) {
 	char tmp_buf[256];
 	char *tmp_ptr = (char*)&tmp_buf;
 	size_t prefix_len = strlen(prefix);
 	// transform in prefix/x/xy/buf/vhost. Final length: prefix+buf+vhost+7+NUL
 	int final_len = vhost_len + len + prefix_len + 8;
 	if (final_len > (sizeof(tmp_buf)-1)) return false;
-	if (final_len > (buf_len-1)) return false;
 	memcpy(tmp_ptr, prefix, prefix_len); tmp_ptr += prefix_len;
 	*(tmp_ptr++) = '/';
 	*(tmp_ptr++) = host[0];
@@ -68,6 +74,7 @@ bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char *ho
 	*(tmp_ptr++) = host[1];
 	*(tmp_ptr++) = '/';
 	memcpy(tmp_ptr, host, len); tmp_ptr += len;
+	char *tmp_ptr_end_of_host = tmp_ptr;
 	*(tmp_ptr++) = '/';
 	memcpy(tmp_ptr, vhost, vhost_len); tmp_ptr += vhost_len;
 	*(tmp_ptr++) = 0;
@@ -76,39 +83,41 @@ bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char *ho
 	if (stat((char*)&tmp_buf, &s) == -1) return false;
 	if (!S_ISDIR(s.st_mode)) return false;
 
-//	printf("test: %s\n", (char*)&tmp_buf);
-	memcpy(buf, (char*)&tmp_buf, tmp_ptr-(char*)&tmp_buf);
+	// found it!
+	*tmp_ptr_end_of_host = 0;
+	info->host = apr_pstrdup(info->pool, host);
+	info->vhost = apr_pstrdup(info->pool, vhost);
+	info->basepath = apr_pstrdup(info->pool, (char*)&tmp_buf);
 	
 	return true;
 }
 
-bool scan_host(const char *host_ro, const char *prefix, char *buf, size_t buf_len) {
+bool scan_host(char *host, const char *prefix, struct autovhost_info *info) {
 	// check validity, only valid chars are a-z 0-9 . _
 	// also, copy host_ro to new var host
-	while(host_ro[0] == '.') host_ro++;
-	size_t len = strlen(host_ro);
+	while(host[0] == '.') host++;
+	size_t len = strlen(host);
 	if (len <= 0) return false;
-	if (buf_len < len+1) return false;
-	char *host = buf;
-	memset(host, 0, len+1);
 
 	char last_c = '.';
 	for(int i = 0; i < len; i++) {
-		char c = host_ro[i];
+		char c = host[i];
 		if ((c == '.') && (last_c == '.')) return false; // invalid
 		last_c = c;
 
-		if (c >= 'A' && c <= 'Z') c += 32; // make lowercase
-		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (c == '.') || (c == '-') || (c == '_')) {
+		if (c >= 'A' && c <= 'Z') {
+			c += 32; // make lowercase
 			host[i] = c;
+		}
+		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (c == '.') || (c == '-') || (c == '_')) {
 			continue;
 		}
 		return false;
 	}
 
 	// test for default paths
-	if (test_path(prefix, "_default", 8, buf, len, buf, buf_len)) return true;
-	if (test_path(prefix, "www", 3, buf, len, buf, buf_len)) return true;
+	if (test_path(prefix, "_default", 8, host, len, info)) return true;
+	if (test_path(prefix, "www", 3, host, len, info)) return true;
 
 	char *vhost = host;
 
@@ -129,14 +138,14 @@ bool scan_host(const char *host_ro, const char *prefix, char *buf, size_t buf_le
 		if (!found) return false; // out of ideas
 		if (len < 2) return false; // no domain has less than 2 chars
 		size_t vhost_len = strlen(vhost);
-		if (test_path(prefix, vhost, vhost_len, host, len, buf, buf_len)) return true;
+		if (test_path(prefix, vhost, vhost_len, host, len, info)) return true;
 		// re-test subparts of vhost
 		for(int i = 0; i < vhost_len; i++) {
-			if (vhost[i] == '.') if (test_path(prefix, vhost + i + 1, vhost_len - (i+1), host, len, buf, buf_len)) return true;
+			if (vhost[i] == '.') if (test_path(prefix, vhost + i + 1, vhost_len - (i+1), host, len, info)) return true;
 		}
 		// defaults
-		if (test_path(prefix, "_default", 8, host, len, buf, buf_len)) return true;
-		if (test_path(prefix, "www", 3, host, len, buf, buf_len)) return true;
+		if (test_path(prefix, "_default", 8, host, len, info)) return true;
+		if (test_path(prefix, "www", 3, host, len, info)) return true;
 	}
 }
 
@@ -181,20 +190,28 @@ void do_test(const char *host) {
 //	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test: %s prefix: %s uri: %s docroot: %s serverpath: %s", ap_get_server_name(r), conf->prefix, r->uri, (char*)&buf, r->server->path);
 
 static int autovhost_translate(request_rec *r) {
-	char buf[256];
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
 
 	if (conf->prefix == NULL) return DECLINED;
 	if (r->prev != NULL) return DECLINED; // do not touch (ie. waste time on already configured) subrequests
 
-	if (!scan_host(ap_get_server_name(r), conf->prefix, (char*)&buf, sizeof(buf)))
+	struct autovhost_info *info = apr_pcalloc(r->pool, sizeof(struct autovhost_info));
+	info->pool = r->pool;
+
+	if (!scan_host(apr_pstrdup(r->pool, ap_get_server_name(r)), conf->prefix, info))
 		return DECLINED; // no result :(
 
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test: %s %s %s", info->host, info->vhost, info->basepath);
+	if (info->basepath == NULL) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Success reported, but no info data");
+		return DECLINED;
+	}
 
 	// duplicate string and assign ap_document_root - YAY THIS IS DIRTYYYYYYYYYYYYY!
 	core_server_config *core_conf = ap_get_module_config(r->server->module_config, &core_module);
-	core_conf->ap_document_root = apr_pstrcat(r->pool, (char*)&buf, NULL);
+	core_conf->ap_document_root = apr_pstrcat(r->pool, info->basepath, "/", info->vhost, NULL);
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test2: %s", core_conf->ap_document_root);
 
 	// prepare stuff to be able to push directives on Apache
 	ap_directive_t *t = apr_pcalloc(r->pool, sizeof(ap_directive_t));
@@ -209,6 +226,10 @@ static int autovhost_translate(request_rec *r) {
 		r->per_dir_config = ap_create_per_dir_config(r->pool);
 	}
 
+	// Fake some input headers to make us look better (DIRTY BIS)
+	apr_table_add(r->headers_in, "X-VHost-Info", apr_pstrcat(r->pool, info->host, "/", info->vhost, NULL));
+
+	// Configure apache options/etc (we made sure apache was nude with #define CORE_PRIVATE, now let's touch those privates)
 	PUSH_APACHE_DIRECTIVE("php_admin_value", "SMTP BOO");
 	char *tmp = apr_pstrcat(r->pool, "doc_root ", core_conf->ap_document_root, NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
