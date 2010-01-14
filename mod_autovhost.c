@@ -202,7 +202,6 @@ static int autovhost_translate(request_rec *r) {
 	if (!scan_host(apr_pstrdup(r->pool, ap_get_server_name(r)), conf->prefix, info))
 		return DECLINED; // no result :(
 
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test: %s %s %s", info->host, info->vhost, info->basepath);
 	if (info->basepath == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Success reported, but no info data");
 		return DECLINED;
@@ -211,7 +210,6 @@ static int autovhost_translate(request_rec *r) {
 	// duplicate string and assign ap_document_root - YAY THIS IS DIRTYYYYYYYYYYYYY!
 	core_server_config *core_conf = ap_get_module_config(r->server->module_config, &core_module);
 	core_conf->ap_document_root = apr_pstrcat(r->pool, info->basepath, "/", info->vhost, NULL);
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "test2: %s", core_conf->ap_document_root);
 
 	// prepare stuff to be able to push directives on Apache
 	ap_directive_t *t = apr_pcalloc(r->pool, sizeof(ap_directive_t));
@@ -219,7 +217,7 @@ static int autovhost_translate(request_rec *r) {
 	parms.pool = r->pool;
 	parms.temp_pool = r->pool;
 	parms.server = r->server;
-	parms.override = (RSRC_CONF | OR_ALL) & ~(OR_AUTHCFG | OR_LIMIT);
+	parms.override = OR_ALL|ACCESS_CONF|RSRC_CONF;//(RSRC_CONF | OR_ALL) & ~(OR_AUTHCFG | OR_LIMIT);
 	parms.override_opts = OPT_ALL | OPT_SYM_OWNER | OPT_MULTI;
 	parms.path = __FILE__;
 	if (r->per_dir_config == NULL) {
@@ -233,6 +231,7 @@ static int autovhost_translate(request_rec *r) {
 	PUSH_APACHE_DIRECTIVE("php_admin_value", "SMTP BOO");
 	char *tmp = apr_pstrcat(r->pool, "doc_root ", core_conf->ap_document_root, NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
+	PUSH_APACHE_DIRECTIVE("Options", "-Indexes"); // doesn't work
 
 	return DECLINED; /* we played with the config, but let apache continue processing normally, with the new informations we are providing */
 }
