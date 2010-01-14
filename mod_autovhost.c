@@ -213,7 +213,7 @@ static int autovhost_translate(request_rec *r) {
 	char *tmp = apr_pstrcat(r->pool, "doc_root ", core_conf->ap_document_root, NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
 
-	return DECLINED;
+	return DECLINED; /* we played with the config, but let apache continue processing normally, with the new informations we are providing */
 }
 
 static void register_hooks(apr_pool_t *p) {
