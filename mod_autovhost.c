@@ -417,6 +417,7 @@ static int autovhost_log(request_rec *r) {
 	apr_table_addn(data_table, "status", apr_itoa(r->pool, r->status));
 	apr_table_addn(data_table, "bytes_sent", apr_ltoa(r->pool, r->bytes_sent));
 	apr_table_addn(data_table, "request_start", apr_ltoa(r->pool, orig->request_time)); // contains time()*1000000+microtime
+	apr_table_addn(data_table, "server_hostname", r->server->server_hostname);
 	apr_table_do(append_received_headers, &n, r->headers_in, NULL);
 	apr_table_do(append_sent_headers, &n, r->headers_out, NULL);
 
