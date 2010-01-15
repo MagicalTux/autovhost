@@ -100,33 +100,49 @@ static void *autovhost_merge_server_config(apr_pool_t *p, void *parentv, void *c
 	return conf;
 }
 
-bool test_path(const char *prefix, const char *vhost, size_t vhost_len, const char *host, size_t len, struct autovhost_info *info) {
+bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char **host, size_t *len, struct autovhost_info *info, int depth) {
 	char tmp_buf[256];
 	char *tmp_ptr = (char*)&tmp_buf;
+	struct stat s;
 	size_t prefix_len = strlen(prefix);
 	// transform in prefix/x/xy/buf/vhost. Final length: prefix+buf+vhost+7+NUL
-	int final_len = vhost_len + len + prefix_len + 8;
+	int final_len = vhost_len + *len + prefix_len + 8;
 	if (final_len > (sizeof(tmp_buf)-1)) return false;
 	memcpy(tmp_ptr, prefix, prefix_len); tmp_ptr += prefix_len;
 	*(tmp_ptr++) = '/';
-	*(tmp_ptr++) = host[0];
+	*(tmp_ptr++) = **host;
 	*(tmp_ptr++) = '/';
-	*(tmp_ptr++) = host[0];
-	*(tmp_ptr++) = host[1];
+	*(tmp_ptr++) = **host;
+	*(tmp_ptr++) = (*host)[1];
 	*(tmp_ptr++) = '/';
-	memcpy(tmp_ptr, host, len); tmp_ptr += len;
+	memcpy(tmp_ptr, *host, *len); tmp_ptr += *len;
 	char *tmp_ptr_end_of_host = tmp_ptr;
+	*tmp_ptr = 0; // for now
+
+	do {
+		char tmp_buf2[256];
+		int linklen = readlink((char*)&tmp_buf, (char*)&tmp_buf2, sizeof(tmp_buf2)-1);
+		if (linklen > 0) {
+			if (depth > 5) return false; // avoid going too far
+			// resume lookup from symlink value
+			if (linklen >= sizeof(tmp_buf2)-1) return false;
+			tmp_buf2[linklen] = 0; // we got a new domain
+			*host = apr_pstrdup(info->pool, (char*)&tmp_buf2);
+			*len = linklen;
+			return test_path(prefix, vhost, vhost_len, host, len, info, depth+1);
+		}
+	} while(0);
+
 	*(tmp_ptr++) = '/';
 	memcpy(tmp_ptr, vhost, vhost_len); tmp_ptr += vhost_len;
 	*(tmp_ptr++) = 0;
 
-	struct stat s;
 	if (stat((char*)&tmp_buf, &s) == -1) return false;
 	if (!S_ISDIR(s.st_mode)) return false;
 
 	// found it!
 	*tmp_ptr_end_of_host = 0;
-	info->host = apr_pstrdup(info->pool, host);
+	info->host = apr_pstrdup(info->pool, *host);
 	info->vhost = apr_pstrdup(info->pool, vhost);
 	info->basepath = apr_pstrdup(info->pool, (char*)&tmp_buf);
 	
@@ -157,8 +173,8 @@ bool scan_host(char *host, const char *prefix, struct autovhost_info *info) {
 	}
 
 	// test for default paths
-	if (test_path(prefix, "_default", 8, host, len, info)) return true;
-	if (test_path(prefix, "www", 3, host, len, info)) return true;
+	if (test_path(prefix, "_default", 8, &host, &len, info, 0)) return true;
+	if (test_path(prefix, "www", 3, &host, &len, info, 0)) return true;
 
 	char *vhost = host;
 
@@ -179,14 +195,14 @@ bool scan_host(char *host, const char *prefix, struct autovhost_info *info) {
 		if (!found) return false; // out of ideas
 		if (len < 2) return false; // no domain has less than 2 chars
 		size_t vhost_len = strlen(vhost);
-		if (test_path(prefix, vhost, vhost_len, host, len, info)) return true;
+		if (test_path(prefix, vhost, vhost_len, &host, &len, info, 0)) return true;
 		// re-test subparts of vhost
 		for(int i = 0; i < vhost_len; i++) {
-			if (vhost[i] == '.') if (test_path(prefix, vhost + i + 1, vhost_len - (i+1), host, len, info)) return true;
+			if (vhost[i] == '.') if (test_path(prefix, vhost + i + 1, vhost_len - (i+1), &host, &len, info, 0)) return true;
 		}
 		// defaults
-		if (test_path(prefix, "_default", 8, host, len, info)) return true;
-		if (test_path(prefix, "www", 3, host, len, info)) return true;
+		if (test_path(prefix, "_default", 8, &host, &len, info, 0)) return true;
+		if (test_path(prefix, "www", 3, &host, &len, info, 0)) return true;
 	}
 }
 
