@@ -288,6 +288,34 @@ static int autovhost_translate(request_rec *r) {
 	// Fake some input headers to make us look better (DIRTY BIS)
 	apr_table_addn(r->headers_in, "X-VHost-Info", apr_pstrcat(r->pool, info->host, "/", info->vhost, NULL));
 
+	int fd = open(apr_pstrcat(r->pool, info->basepath, "_", info->vhost, ".config"), O_RDONLY);
+	if (fd > 0) {
+		unsigned char version;
+		if (read(fd, &version, 1) != 1) version = 0xff;
+		if (version == 1) {
+			while(1) {
+				unsigned char code;
+				if (read(fd, &code, 1) != 1) break;
+				if (code == 0xff) break; // "end of file"
+				if (code == 0) {
+					unsigned char len;
+					char *setting;
+					char *value;
+					if (read(fd, &len, 1) != 1) break;
+					setting = apr_pcalloc(r->pool, len+1);
+					if (read(fd, setting, len) != len) break;
+					if (read(fd, &len, 1) != 1) break;
+					value = apr_pcalloc(r->pool, len+1);
+					if (read(fd, value, len) != len) break;
+					PUSH_APACHE_DIRECTIVE(setting, value);
+					continue;
+				}
+				break; // unknown code
+			}
+		}
+		close(fd);
+	}
+
 	// Configure apache options/etc (we made sure apache was nude with #define CORE_PRIVATE, now let's grop those privates)
 	char *tmp = apr_pstrcat(r->pool, "doc_root \"", ap_escape_quotes(r->pool, core_conf->ap_document_root), "\"", NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
@@ -295,7 +323,6 @@ static int autovhost_translate(request_rec *r) {
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
 	tmp = apr_pstrcat(r->pool, "session.save_path \"", ap_escape_quotes(r->pool, info->basepath), "/sessions\"", NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
-//	PUSH_APACHE_DIRECTIVE("Options", "-Indexes");
 
 	return DECLINED; /* we played with the config, but let apache continue processing normally, with the new informations we are providing */
 }
