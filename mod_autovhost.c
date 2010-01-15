@@ -25,11 +25,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/un.h>
 
 module AP_MODULE_DECLARE_DATA autovhost_module;
 
 typedef struct autovhost_sconf_t {
 	const char *prefix;
+	const char *socket;
 } autovhost_sconf_t;
 
 struct autovhost_info {
@@ -376,6 +378,8 @@ static int append_sent_headers(void *rec, const char *key, const char *value) {
 }
 
 static int autovhost_log(request_rec *r) {
+	autovhost_sconf_t *conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
+	if (conf->socket == NULL) return DECLINED;
 	// combined format: "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"
 	// %h: remote host
 	// %l: Remote logname (from identd, if supplied). This will return a dash unless mod_ident is present and IdentityCheck is set On.
@@ -431,6 +435,36 @@ static int autovhost_log(request_rec *r) {
 	apr_table_do(make_table_escape_uri, &n, data_table, NULL);
 	apr_table_do(build_final_buffer_for_table, &n, data_table_esc, NULL);
 
+	int sock;
+
+	// send packet via unix socket
+	if ((sock = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to create socket: %s", strerror(errno));
+		return DECLINED;
+	}
+
+	struct sockaddr_un addr;
+	memset(&addr, 0, sizeof(struct sockaddr_un));
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, conf->socket);
+
+	/* if (bind(sock, &addr, sizeof(addr)) < 0) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to bind socket: %s", strerror(errno));
+		close(sock);
+		return DECLINED;
+	} */
+
+	int real_len = strlen(n.buf);
+	int slen = sendto(sock, n.buf, real_len, 0, &addr, sizeof(addr));
+
+	if (slen == -1) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to send log: %s", strerror(errno));
+		close(sock);
+		return DECLINED;
+	}
+
+	close(sock);
+
 	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Estimated len: %d - string: %s", n.len, n.buf);
 
 	return OK;
@@ -458,6 +492,22 @@ static const char *autovhost_set_prefix(cmd_parms *cmd, void *dummy, const char 
 	return NULL;
 }
 
+static const char *autovhost_set_socket(cmd_parms *cmd, void *dummy, const char *map) {
+	autovhost_sconf_t *conf;
+	conf = (autovhost_sconf_t*)ap_get_module_config(cmd->server->module_config, &autovhost_module);
+
+	if (!ap_os_is_path_absolute(cmd->pool, map)) {
+		if (strcasecmp(map, "none")) {
+			return "path string must be an absolute path, or 'none'";
+		}
+		conf->socket = NULL;
+		return NULL;
+	}
+
+	conf->socket = map;
+	return NULL;
+}
+
 static const command_rec autovhost_commands[] = {
 	AP_INIT_TAKE1(
 		"AutoVhostPrefix",
@@ -465,6 +515,13 @@ static const command_rec autovhost_commands[] = {
 		NULL,
 		RSRC_CONF,
 		"Allows definition of auto-vhost base root"
+	),
+	AP_INIT_TAKE1(
+		"AutoVHostLogSocket",
+		autovhost_set_socket,
+		NULL,
+		RSRC_CONF,
+		"Allows definition of auto-vhost logging socket"
 	),
 	{ NULL }
 };
