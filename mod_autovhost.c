@@ -290,7 +290,7 @@ static int autovhost_translate(request_rec *r) {
 	// Fake some input headers to make us look better (DIRTY BIS)
 	apr_table_addn(r->headers_in, "X-VHost-Info", apr_pstrcat(r->pool, info->host, "/", info->vhost, NULL));
 
-	int fd = open(apr_pstrcat(r->pool, info->basepath, "_", info->vhost, ".config"), O_RDONLY);
+	int fd = open(apr_pstrcat(r->pool, info->basepath, "_", info->vhost, ".config", NULL), O_RDONLY);
 	if (fd > 0) {
 		unsigned char version;
 		if (read(fd, &version, 1) != 1) version = 0xff;
