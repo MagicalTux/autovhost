@@ -10,6 +10,10 @@ fi
 APACHECTL=`PATH="$(dirname "$APXS"):$PATH" which apache2ctl 2>/dev/null`
 
 if [ x"$APACHECTL" = x ]; then
+	APACHECTL=`PATH="$(dirname "$APXS"):$PATH" which apachectl 2>/dev/null`
+fi
+
+if [ x"$APACHECTL" = x ]; then
 	echo "apache2ctl not found, make sure you have it in PATH!"
 	exit 1
 fi
