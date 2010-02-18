@@ -17,3 +17,20 @@
 	_name ## _pos += _len; \
 } while(0)
 
+#define BUF_EMPTY(_name) (_name ## _pos == 0)
+
+#define BUF_WRITE(_fd, _name) do { \
+	size_t res = write(_fd, _name, _name ## _pos); \
+	if (res == -1) { \
+		perror("write"); \
+		close(_fd); \
+		_fd = 0; \
+		_fd ## _status = 0; \
+	} else if (_name ## _pos == res) { \
+		_name ## _pos = 0; \
+	} else { \
+		memmove(_name + res, _name, res); \
+		_name ## _pos -= res; \
+	} \
+} while(0)
+
