@@ -38,6 +38,7 @@ void msg_log(int pri, const char *fmt, ...) {
 	va_start(ap, fmt);
 	if (opt_use_stderr) {
 		vfprintf(stderr, fmt, ap);
+		fprintf(stderr, "\n");
 	} else {
 		vsyslog(pri, fmt, ap);
 	}
@@ -100,6 +101,8 @@ int main(int argc, char *argv[]) {
 	}
 	chmod(opt_socket, 0777);
 
+	signal(SIGPIPE, SIG_IGN);
+
 	if (opt_do_fork) {
 		int pid = fork();
 		if (pid > 0) { // parent
@@ -134,7 +137,7 @@ int main(int argc, char *argv[]) {
 
 				// need to establish a connection
 				if ((transmit = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-					msg_log(LOG_WARNING, "Failed to create socket: %s\n", strerror(errno));
+					msg_log(LOG_WARNING, "Failed to create socket: %s", strerror(errno));
 					transmit_cnx = time(NULL)+30;
 					break;
 				}
@@ -155,17 +158,17 @@ int main(int argc, char *argv[]) {
 				int res = connect(transmit, (struct sockaddr *)&tx_addr, sizeof(tx_addr));
 				if (res == 0) {
 					transmit_status = 2; // established
-					msg_log(LOG_INFO, "Connected to %s\n", opt_target);
+					msg_log(LOG_INFO, "Connected to %s", opt_target);
 					if (!BUF_EMPTY(mainbuf)) FD_SET(transmit, &wfd);
 					break;
 				} else if (errno == EINPROGRESS) {
 					transmit_status = 1; // waiting for connection
 					transmit_cnx = time(NULL);
 					FD_SET(transmit, &wfd);
-					msg_log(LOG_INFO, "Connecting to %s\n", opt_target);
+					msg_log(LOG_INFO, "Connecting to %s", opt_target);
 					break;
 				} else {
-					msg_log(LOG_WARNING, "Failed to connect socket: %s\n", strerror(errno));
+					msg_log(LOG_WARNING, "Failed to connect socket: %s", strerror(errno));
 					transmit_cnx = time(NULL)+30;
 					break;
 				}
@@ -188,11 +191,11 @@ int main(int argc, char *argv[]) {
 
 		int res = select(max(sock,transmit)+1, &rfd, &wfd, NULL, &tv);
 		if (res == -1) {
-			msg_log(LOG_ALERT, "FATAL: something REALLY BAD: %s!\n", strerror(errno));
+			msg_log(LOG_ALERT, "FATAL: something REALLY BAD: %s!", strerror(errno));
 			return 5;
 		}
 		if ((transmit_status == 1) && (transmit_cnx < (time(NULL) - 30))) {
-			msg_log(LOG_WARNING, "Connection timeout while connecting to server. Waiting 60 secs before reconnect.\n");
+			msg_log(LOG_WARNING, "Connection timeout while connecting to server. Waiting 60 secs before reconnect.");
 			close(transmit);
 			transmit = 0;
 			transmit_cnx = time(NULL)+60;
@@ -203,7 +206,7 @@ int main(int argc, char *argv[]) {
 			char buf[65535];
 			res = recv(sock, &buf, 65535, MSG_DONTWAIT);
 			if (res == -1) {
-				msg_log(LOG_WARNING, "Packet reception failed: %s\n", strerror(errno));
+				msg_log(LOG_WARNING, "Packet reception failed: %s", strerror(errno));
 				continue;
 			}
 			if (res == 0) continue;
@@ -230,10 +233,10 @@ int main(int argc, char *argv[]) {
 					if (getsockopt(transmit, SOL_SOCKET, SO_ERROR, &error, &error_len) == -1) error = errno;
 					if (error == 0) {
 						transmit_status = 2;
-						msg_log(LOG_INFO, "Connection established\n");
+						msg_log(LOG_INFO, "Connection established");
 						break;
 					}
-					msg_log(LOG_WARNING, "Failed to connect to socket: %s\n", strerror(error));
+					msg_log(LOG_WARNING, "Failed to connect to socket: %s", strerror(error));
 					close(transmit);
 					transmit = 0;
 					transmit_status = 0;

@@ -22,7 +22,7 @@
 #define BUF_WRITE(_fd, _name) do { \
 	size_t res = write(_fd, _name, _name ## _pos); \
 	if (res == -1) { \
-		perror("write"); \
+		msg_log(LOG_WARNING, "Failed to write to socket: %s", strerror(errno)); \
 		close(_fd); \
 		_fd = 0; \
 		_fd ## _status = 0; \
