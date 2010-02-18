@@ -226,6 +226,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		if (FD_ISSET(transmit, &wfd)) {
+			FD_CLR(transmit, &wfd);
 			switch(transmit_status) {
 				case 1:
 				{
