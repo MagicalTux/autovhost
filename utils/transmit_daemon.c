@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <syslog.h>
 #include <stdarg.h>
+#include <signal.h>
 
 #include "buf.h"
 
