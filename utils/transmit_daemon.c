@@ -216,6 +216,7 @@ int main(int argc, char *argv[]) {
 			BUF_APPEND(mainbuf, "\n", 1);
 		}
 		if (FD_ISSET(transmit, &rfd)) {
+			FD_CLR(transmit, &rfd);
 			char buf[256];
 			int res = read(transmit, (char*)&buf, sizeof(buf));
 			if ((res == -1) && (errno != EAGAIN)) {
