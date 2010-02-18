@@ -16,23 +16,37 @@
 #include <string.h>
 #include <time.h>
 #include <fcntl.h>
+#include <syslog.h>
+#include <stdarg.h>
 
 #include "buf.h"
 
 #define max(a,b) (a>b?a:b)
 
-bool opt_do_fork = false;
 bool do_quit = false;
+bool opt_do_fork = false;
+bool opt_use_stderr = false;
 const char *opt_socket = NULL;
 const char *opt_target = NULL;
 
 void print_help(const char *myname) {
-	fprintf(stderr, "Usage: %s -s /path/to/sock -t target_server_ip [-f]\n", myname);
+	fprintf(stderr, "Usage: %s -s /path/to/sock -t target_server_ip [-f] [-e]\n", myname);
+}
+
+void msg_log(int pri, const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	if (opt_use_stderr) {
+		vfprintf(stderr, fmt, ap);
+	} else {
+		vsyslog(pri, fmt, ap);
+	}
+	va_end(ap);
 }
 
 int main(int argc, char *argv[]) {
 	while(1) {
-		int op = getopt(argc, argv, "s:t:fh");
+		int op = getopt(argc, argv, "s:t:feh");
 		if (op == -1) break;
 		switch(op) {
 			case 'h':
@@ -41,6 +55,8 @@ int main(int argc, char *argv[]) {
 			case 'f':
 				opt_do_fork = true;
 				break;
+			case 'e':
+				opt_use_stderr = true;
 			case 's':
 				opt_socket = optarg;
 				break;
@@ -84,6 +100,19 @@ int main(int argc, char *argv[]) {
 	}
 	chmod(opt_socket, 0777);
 
+	if (opt_do_fork) {
+		int pid = fork();
+		if (pid > 0) { // parent
+			fprintf(stderr, "Forked child pid %d\n", pid);
+			return 0;
+		}
+		if (pid == 0) {
+			setsid();
+		}
+	}
+
+	openlog("autovhost_log", LOG_CONS, LOG_DAEMON);
+
 	BUF_DEFINE(mainbuf);
 
 	fd_set rfd;
@@ -104,7 +133,7 @@ int main(int argc, char *argv[]) {
 
 				// need to establish a connection
 				if ((transmit = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-					fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+					msg_log(LOG_WARNING, "Failed to create socket: %s\n", strerror(errno));
 					transmit_cnx = time(NULL)+30;
 					break;
 				}
@@ -125,17 +154,17 @@ int main(int argc, char *argv[]) {
 				int res = connect(transmit, (struct sockaddr *)&tx_addr, sizeof(tx_addr));
 				if (res == 0) {
 					transmit_status = 2; // established
-					fprintf(stderr, "Connected to %s\n", opt_target);
+					msg_log(LOG_INFO, "Connected to %s\n", opt_target);
 					if (!BUF_EMPTY(mainbuf)) FD_SET(transmit, &wfd);
 					break;
 				} else if (errno == EINPROGRESS) {
 					transmit_status = 1; // waiting for connection
 					transmit_cnx = time(NULL);
 					FD_SET(transmit, &wfd);
-					fprintf(stderr, "Connecting to %s\n", opt_target);
+					msg_log(LOG_INFO, "Connecting to %s\n", opt_target);
 					break;
 				} else {
-					fprintf(stderr, "Failed to connect socket: %s\n", strerror(errno));
+					msg_log(LOG_WARNING, "Failed to connect socket: %s\n", strerror(errno));
 					transmit_cnx = time(NULL)+30;
 					break;
 				}
@@ -157,11 +186,11 @@ int main(int argc, char *argv[]) {
 
 		int res = select(max(sock,transmit)+1, &rfd, &wfd, NULL, &tv);
 		if (res == -1) {
-			fprintf(stderr, "FATAL: something REALLY BAD: %s!\n", strerror(errno));
+			msg_log(LOG_ALERT, "FATAL: something REALLY BAD: %s!\n", strerror(errno));
 			return 5;
 		}
 		if ((transmit_status == 1) && (transmit_cnx < (time(NULL) - 30))) {
-			fprintf(stderr, "Connection timeout while connecting to server. Waiting 60 secs before reconnect.\n");
+			msg_log(LOG_WARNING, "Connection timeout while connecting to server. Waiting 60 secs before reconnect.\n");
 			close(transmit);
 			transmit = 0;
 			transmit_cnx = time(NULL)+60;
@@ -172,7 +201,7 @@ int main(int argc, char *argv[]) {
 			char buf[65535];
 			res = recv(sock, &buf, 65535, MSG_DONTWAIT);
 			if (res == -1) {
-				fprintf(stderr, "Packet reception failed: %s\n", strerror(errno));
+				msg_log(LOG_WARNING, "Packet reception failed: %s\n", strerror(errno));
 				continue;
 			}
 			if (res == 0) continue;
@@ -189,10 +218,10 @@ int main(int argc, char *argv[]) {
 					if (getsockopt(transmit, SOL_SOCKET, SO_ERROR, &error, &error_len) == -1) error = errno;
 					if (error == 0) {
 						transmit_status = 2;
-						fprintf(stderr, "Connection established\n");
+						msg_log(LOG_INFO, "Connection established\n");
 						break;
 					}
-					fprintf(stderr, "Failed to connect to socket: %s\n", strerror(error));
+					msg_log(LOG_WARNING, "Failed to connect to socket: %s\n", strerror(error));
 					close(transmit);
 					transmit = 0;
 					transmit_status = 0;
