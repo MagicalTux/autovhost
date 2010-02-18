@@ -130,6 +130,7 @@ int main(int argc, char *argv[]) {
 				if (transmit != 0) close(transmit);
 
 				FD_ZERO(&wfd);
+				FD_ZERO(&rfd);
 
 				// need to establish a connection
 				if ((transmit = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -177,6 +178,7 @@ int main(int argc, char *argv[]) {
 				} else {
 					FD_SET(transmit, &wfd);
 				}
+				FD_SET(transmit, &rfd);
 		}
 
 		struct timeval tv;
@@ -208,6 +210,15 @@ int main(int argc, char *argv[]) {
 			// append to our main buffer
 			BUF_APPEND(mainbuf, &buf, res);
 			BUF_APPEND(mainbuf, "\n", 1);
+		}
+		if (FD_ISSET(transmit, &rfd)) {
+			char buf[256];
+			int res = read(transmit, (char*)&buf, sizeof(buf));
+			if ((res == -1) && (errno != EAGAIN)) {
+				close(transmit);
+				transmit = 0;
+				transmit_status = 0;
+			}
 		}
 		if (FD_ISSET(transmit, &wfd)) {
 			switch(transmit_status) {
