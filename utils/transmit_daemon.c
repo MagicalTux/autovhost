@@ -236,7 +236,10 @@ int main(int argc, char *argv[]) {
 					if (getsockopt(transmit, SOL_SOCKET, SO_ERROR, &error, &error_len) == -1) error = errno;
 					if (error == 0) {
 						transmit_status = 2;
+						transmit_cnx = time(NULL);
 						msg_log(LOG_INFO, "Connection established");
+						FD_ZERO(&wfd);
+						FD_ZERO(&rfd);
 						break;
 					}
 					msg_log(LOG_WARNING, "Failed to connect to socket: %s", strerror(error));
