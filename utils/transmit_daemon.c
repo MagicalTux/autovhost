@@ -207,6 +207,7 @@ int main(int argc, char *argv[]) {
 			if (res == 0) continue;
 			// append to our main buffer
 			BUF_APPEND(mainbuf, &buf, res);
+			BUF_APPEND(mainbuf, "\n", 1);
 		}
 		if (FD_ISSET(transmit, &wfd)) {
 			switch(transmit_status) {
