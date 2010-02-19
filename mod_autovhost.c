@@ -102,11 +102,15 @@ static void *autovhost_merge_server_config(apr_pool_t *p, void *parentv, void *c
 	return conf;
 }
 
-bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char **host, size_t *len, struct autovhost_info *info, int depth) {
+static bool test_path(const char *prefix, const char *vhost, size_t vhost_len, char **host, size_t *len, struct autovhost_info *info, int depth) {
 	char tmp_buf[256];
 	char *tmp_ptr = (char*)&tmp_buf;
 	struct stat s;
 	size_t prefix_len = strlen(prefix);
+
+	if (strcmp(vhost, "sessions") == 0) return false;
+	if (strcmp(vhost, "includes") == 0) return false;
+
 	// transform in prefix/x/xy/buf/vhost. Final length: prefix+buf+vhost+7+NUL
 	int final_len = vhost_len + *len + prefix_len + 8;
 	if (final_len > (sizeof(tmp_buf)-1)) return false;
