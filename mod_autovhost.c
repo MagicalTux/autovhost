@@ -465,7 +465,7 @@ static int autovhost_log(request_rec *r) {
 
 	close(sock);
 
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Estimated len: %d - string: %s", n.len, n.buf);
+//	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Estimated len: %d - string: %s", n.len, n.buf);
 
 	return OK;
 }
