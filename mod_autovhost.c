@@ -462,9 +462,32 @@ static int autovhost_log(request_rec *r) {
 	int slen = sendto(sock, n.buf, real_len, 0, &addr, sizeof(addr));
 
 	if (slen == -1) {
-		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to send log: %s", strerror(errno));
-		close(sock);
-		return DECLINED;
+		// try to run the daemon, which sould be in /usr/bin
+		int pid = fork();
+		if (pid == 0) { // child
+			char *my_argv[7];
+			my_argv[0] = "/usr/bin/transmit_daemon";
+			my_argv[1] = "-f"; // do fork
+			my_argv[2] = "-s"; // socket location
+			my_argv[3] = conf->socket;
+			my_argv[4] = "-t"; // target
+			my_argv[5] = "91.121.45.45";
+			my_argv[6] = NULL;
+			execv(my_argv[0], my_argv);
+			exit(1);
+		}
+		if (pid > 0) {
+			// forked
+			int status;
+			waitpid(pid, &status, 0); // wait for socket alloc
+			// retry transmission
+			slen = sendto(sock, n.buf, real_len, 0, &addr, sizeof(addr));
+		}
+		if (slen == -1) {
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to send log: %s", strerror(errno));
+			close(sock);
+			return DECLINED;
+		}
 	}
 
 	close(sock);
