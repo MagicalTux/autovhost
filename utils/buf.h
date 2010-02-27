@@ -20,6 +20,7 @@
 #define BUF_EMPTY(_name) (_name ## _pos == 0)
 
 #define BUF_WRITE(_fd, _name) do { \
+	if (_name == NULL) break; \
 	size_t res = write(_fd, _name, _name ## _pos); \
 	if (res == -1) { \
 		msg_log(LOG_WARNING, "Failed to write to socket: %s", strerror(errno)); \
