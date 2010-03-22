@@ -27,6 +27,21 @@
 #include <unistd.h>
 #include <sys/un.h>
 
+#if 0
+// php stuff
+#include <stdlib.h>
+#include "zend.h"
+#include "zend_qsort.h"
+#include "zend_API.h"
+#include "zend_ini.h"
+#include "zend_alloc.h"
+#include "zend_operators.h"
+
+zend_alter_ini_entry("safe_mode", 9, "on", strlen("on"), 4, 16);
+zend_alter_ini_entry("open_basedir", 13, path, strlen(path), 4, 16);
+
+#endif
+
 module AP_MODULE_DECLARE_DATA autovhost_module;
 
 typedef struct autovhost_sconf_t {
@@ -262,8 +277,10 @@ static int autovhost_translate(request_rec *r) {
 	struct autovhost_info *info = apr_pcalloc(r->pool, sizeof(struct autovhost_info));
 	info->pool = r->pool;
 
-	if (!scan_host(apr_pstrdup(r->pool, ap_get_server_name(r)), conf->prefix, info))
-		return DECLINED; // no result :(
+	if (!scan_host(apr_pstrdup(r->pool, ap_get_server_name(r)), conf->prefix, info)) {
+		if (!scan_host(apr_pstrdup(r->pool, "default"), conf->prefix, info))
+			return DECLINED; // no result, no default :(
+	}
 
 	if (info->basepath == NULL) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Success reported, but no info data");
