@@ -219,7 +219,7 @@ int main(int argc, char *argv[]) {
 			FD_CLR(transmit, &rfd);
 			char buf[256];
 			int res = read(transmit, (char*)&buf, sizeof(buf));
-			if ((res == -1) && (errno != EAGAIN)) {
+			if (((res == -1) && (errno != EAGAIN)) || (res == 0)) {
 				close(transmit);
 				FD_CLR(transmit, &rfd);
 				FD_CLR(transmit, &wfd);
