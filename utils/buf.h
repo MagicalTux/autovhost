@@ -30,7 +30,7 @@
 	} else if (_name ## _pos == res) { \
 		_name ## _pos = 0; \
 	} else { \
-		memmove(_name + res, _name, res); \
+		memmove(_name, _name + res, _name ## _pos - res); \
 		_name ## _pos -= res; \
 	} \
 } while(0)
