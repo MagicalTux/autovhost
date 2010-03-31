@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	unlink(opt_socket);
+//	unlink(opt_socket);
 	
 	int sock;
 	int transmit = 0;
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
 		if (res == 0) continue;
 		if (FD_ISSET(sock, &rfd)) {
 			char buf[65535];
-			res = recv(sock, &buf, 65535, MSG_DONTWAIT);
+			res = recv(sock, &buf, 65535, 0); //MSG_DONTWAIT);
 			if (res == -1) {
 				msg_log(LOG_WARNING, "Packet reception failed: %s", strerror(errno));
 				continue;
