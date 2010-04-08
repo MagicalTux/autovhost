@@ -100,6 +100,7 @@ static void *autovhost_create_server_config(apr_pool_t *p, server_rec *s) {
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)apr_pcalloc(p, sizeof(autovhost_sconf_t));
 	conf->prefix = NULL;
+	conf->socket = NULL;
 	return conf;
 }
 
