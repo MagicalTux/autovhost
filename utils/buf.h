@@ -1,7 +1,8 @@
 // Set of defines for buffers management
 
-#define BUF_STEP 256*1024
+#define BUF_STEP (256*1024)
 #define BUF_MAX_WASTE (BUF_STEP*16)
+#define BUF_MAX_SIZE (BUF_STEP*2048)
 
 #define BUF_DEFINE(_name) char *_name = NULL; size_t _name ## _pos = 0; size_t _name ## _size = 0;
 
@@ -9,10 +10,11 @@
 	if (_name ## _size <= (_name ## _pos + _len)) { \
 		while (_name ## _size <= (_name ## _pos + _len)) \
 			_name ## _size += (BUF_STEP); \
+		if (_name ## _size > BUF_MAX_SIZE) abort(); \
 		if (_name == NULL) \
 			_name = malloc(_name ## _size); \
 		else \
-		_name = realloc(_name, _name ## _size); \
+			_name = realloc(_name, _name ## _size); \
 	} \
 	memcpy(_name + _name ## _pos, _var, _len); \
 	_name ## _pos += _len; \
@@ -35,7 +37,7 @@
 		_name ## _pos -= res; \
 	} \
 	if ((_name ## _size - _name ## _pos) > BUF_MAX_WASTE) { \
-		_name ## _size = ((long)((_name ## _pos) / BUF_STEP)) * BUF_STEP + BUF_STEP; \
+		_name ## _size = ((size_t)((_name ## _pos) / BUF_STEP)) * BUF_STEP + BUF_STEP; \
 		_name = realloc(_name, _name ## _size); \
 	} \
 } while(0)

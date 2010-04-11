@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-//	unlink(opt_socket);
+	unlink(opt_socket);
 	
 	int sock;
 	int transmit = 0;
@@ -254,9 +254,14 @@ int main(int argc, char *argv[]) {
 					break;
 				}
 				case 2:
+					transmit_cnx = time(NULL);
 					BUF_WRITE(transmit, mainbuf);
 					break;
 			}
+		}
+
+		if ((!FD_ISSET(transmit, &wfd)) && (transmit_cnx < (time(NULL)-600))) {
+			do_quit = true; // 10 min without data, stop here
 		}
 	}
 
