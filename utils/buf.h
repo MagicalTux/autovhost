@@ -1,6 +1,7 @@
 // Set of defines for buffers management
 
 #define BUF_STEP 256*1024
+#define BUF_MAX_WASTE (BUF_STEP*16)
 
 #define BUF_DEFINE(_name) char *_name = NULL; size_t _name ## _pos = 0; size_t _name ## _size = 0;
 
@@ -32,6 +33,10 @@
 	} else { \
 		memmove(_name, _name + res, _name ## _pos - res); \
 		_name ## _pos -= res; \
+	} \
+	if ((_name ## _size - _name ## _pos) > BUF_MAX_WASTE) { \
+		_name ## _size = ((long)((_name ## _pos) / BUF_STEP)) * BUF_STEP + BUF_STEP; \
+		_name = realloc(_name, _name ## _size); \
 	} \
 } while(0)
 
