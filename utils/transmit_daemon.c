@@ -202,7 +202,14 @@ int main(int argc, char *argv[]) {
 			transmit_cnx = time(NULL)+60;
 			transmit_status = 0;
 		}
-		if (res == 0) continue;
+
+		if (res == 0) {
+			if (transmit_cnx < (time(NULL)-600)) {
+				do_quit = true; // 10 min without data, stop here
+			}
+			continue;
+		}
+
 		if (FD_ISSET(sock, &rfd)) {
 			char buf[65535];
 			res = recv(sock, &buf, 65535, 0); //MSG_DONTWAIT);
@@ -258,10 +265,6 @@ int main(int argc, char *argv[]) {
 					BUF_WRITE(transmit, mainbuf);
 					break;
 			}
-		}
-
-		if ((!FD_ISSET(transmit, &wfd)) && (transmit_cnx < (time(NULL)-600))) {
-			do_quit = true; // 10 min without data, stop here
 		}
 	}
 

@@ -2,7 +2,7 @@
 
 #define BUF_STEP (256*1024)
 #define BUF_MAX_WASTE (BUF_STEP*16)
-#define BUF_MAX_SIZE (BUF_STEP*2048)
+#define BUF_MAX_SIZE (BUF_STEP*1024)
 
 #define BUF_DEFINE(_name) char *_name = NULL; size_t _name ## _pos = 0; size_t _name ## _size = 0;
 
@@ -24,8 +24,8 @@
 
 #define BUF_WRITE(_fd, _name) do { \
 	if (_name == NULL) break; \
-	size_t res = write(_fd, _name, _name ## _pos); \
-	if (res == -1) { \
+	ssize_t res = write(_fd, _name, _name ## _pos); \
+	if ((res == -1) && (errno != EAGAIN)) { \
 		msg_log(LOG_WARNING, "Failed to write to socket: %s", strerror(errno)); \
 		close(_fd); \
 		_fd = 0; \
