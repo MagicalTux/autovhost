@@ -274,6 +274,7 @@ void do_test(const char *host) {
 static int autovhost_translate(request_rec *r) {
 	autovhost_sconf_t *conf;
 	conf = (autovhost_sconf_t*)ap_get_module_config(r->server->module_config, &autovhost_module);
+	core_server_config *core_conf = ap_get_module_config(r->server->module_config, &core_module);
 
 	if (conf->prefix == NULL) return DECLINED;
 	if (r->prev != NULL) return DECLINED; // do not touch (ie. waste time on already configured) subrequests
@@ -294,7 +295,6 @@ static int autovhost_translate(request_rec *r) {
 	}
 
 	// duplicate string and assign ap_document_root - YAY THIS IS DIRTYYYYYYYYYYYYY!
-	core_server_config *core_conf = ap_get_module_config(r->server->module_config, &core_module);
 	core_conf->ap_document_root = apr_pstrcat(r->pool, info->basepath, "/", info->vhost, NULL);
 
 	// prepare stuff to be able to push directives on Apache
