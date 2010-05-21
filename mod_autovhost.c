@@ -278,7 +278,7 @@ static int autovhost_translate(request_rec *r) {
 	if (conf->prefix == NULL) return DECLINED;
 	if (r->prev != NULL) return DECLINED; // do not touch (ie. waste time on already configured) subrequests
 
-	times(request_times);
+	times(&request_times);
 
 	struct autovhost_info *info = apr_pcalloc(r->pool, sizeof(struct autovhost_info));
 	info->pool = r->pool;
@@ -429,7 +429,7 @@ static int autovhost_log(request_rec *r) {
 
 	// compute cpu time
 	struct tms final_times;
-	times(final_times);
+	times(&final_times);
 	long ticks_per_second = sysconf(_SC_CLK_TCK);
 	long tms_utime_delta = (final_times.tms_utime - request_times.tms_utime) * 1000000 / ticks_per_second;
 	long tms_stime_delta = (final_times.tms_stime - request_times.tms_stime) * 1000000 / ticks_per_second;
