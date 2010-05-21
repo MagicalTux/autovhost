@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/times.h>
 #include <unistd.h>
 #include <sys/un.h>
 
@@ -57,6 +58,8 @@ struct autovhost_info {
 };
 
 static const char c2x_table[] = "0123456789abcdef";
+
+static struct tms request_times;
 
 static APR_INLINE unsigned char *c2x(unsigned what, unsigned char prefix,
 		unsigned char *where)
@@ -275,6 +278,8 @@ static int autovhost_translate(request_rec *r) {
 	if (conf->prefix == NULL) return DECLINED;
 	if (r->prev != NULL) return DECLINED; // do not touch (ie. waste time on already configured) subrequests
 
+	times(request_times);
+
 	struct autovhost_info *info = apr_pcalloc(r->pool, sizeof(struct autovhost_info));
 	info->pool = r->pool;
 
@@ -422,6 +427,16 @@ static int autovhost_log(request_rec *r) {
 	while(orig->prev) orig = orig->prev;
 	while(r->next) r = r->next;
 
+	// compute cpu time
+	struct tms final_times;
+	times(final_times);
+	long ticks_per_second = sysconf(_SC_CLK_TCK);
+	long tms_utime_delta = (final_times.tms_utime - request_times.tms_utime) * 1000000 / ticks_per_second;
+	long tms_stime_delta = (final_times.tms_stime - request_times.tms_stime) * 1000000 / ticks_per_second;
+	long tms_cutime_delta = (final_times.tms_cutime - request_times.tms_cutime) * 1000000 / ticks_per_second;
+	long tms_cstime_delta = (final_times.tms_cstime - request_times.tms_cstime) * 1000000 / ticks_per_second;
+	// convert tms_*_delta to 1/1000000th second
+
 	apr_table_addn(data_table, "now", apr_ltoa(r->pool, apr_time_now()));
 	apr_table_addn(data_table, "host", apr_table_get(orig->notes, "autovhost_host"));
 	apr_table_addn(data_table, "vhost", apr_table_get(orig->notes, "autovhost_vhost"));
@@ -443,6 +458,10 @@ static int autovhost_log(request_rec *r) {
 	apr_table_addn(data_table, "status", apr_itoa(r->pool, r->status));
 	apr_table_addn(data_table, "bytes_sent", apr_ltoa(r->pool, r->bytes_sent));
 	apr_table_addn(data_table, "request_start", apr_ltoa(r->pool, orig->request_time)); // contains time()*1000000+microtime
+	apr_table_addn(data_table, "tms_utime_delta", apr_ltoa(r->pool, tms_utime_delta));
+	apr_table_addn(data_table, "tms_stime_delta", apr_ltoa(r->pool, tms_stime_delta));
+	apr_table_addn(data_table, "tms_cutime_delta", apr_ltoa(r->pool, tms_cutime_delta));
+	apr_table_addn(data_table, "tms_cstime_delta", apr_ltoa(r->pool, tms_cstime_delta));
 	apr_table_addn(data_table, "server_hostname", r->server->server_hostname);
 	apr_table_do(append_received_headers, &n, r->headers_in, NULL);
 	apr_table_do(append_sent_headers, &n, r->headers_out, NULL);
