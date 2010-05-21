@@ -18,6 +18,8 @@ if [ x"$APACHECTL" = x ]; then
 	exit 1
 fi
 
+"$APACHECTL" stop
 "$APXS" -i -a -Wc,-Wall -Wc,--std=gnu99 -n autovhost -c mod_autovhost.c
-"$APACHECTL" restart
+sleep 1
+env -i "$APACHECTL" start
 
