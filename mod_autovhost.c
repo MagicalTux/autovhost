@@ -148,11 +148,24 @@ static bool test_path(const char *prefix, const char *vhost, size_t vhost_len, c
 		char tmp_buf2[256];
 		int linklen = readlink((char*)&tmp_buf, (char*)&tmp_buf2, sizeof(tmp_buf2)-1);
 		if (linklen > 0) {
+			char *tmp_vhost;
 			if (depth > 5) return false; // avoid going too far
 			// resume lookup from symlink value
 			if (linklen >= sizeof(tmp_buf2)-1) return false;
 			tmp_buf2[linklen] = 0; // we got a new domain
 			*host = apr_pstrdup(info->pool, (char*)&tmp_buf2);
+			// check for subdomain redirect
+			tmp_vhost = *host;
+			while(*tmp_vhost != 0) {
+				if (*tmp_vhost == '/') {
+					size_t tmp_vhost_len = *len - (intptr_t)(tmp_vhost - (*host)) - 1;
+					*len -= tmp_vhost_len + 1;
+					*tmp_vhost = 0;
+					tmp_vhost++;
+					return test_path(prefix, tmp_vhost, tmp_vhost_len, host, len, info, depth+1);
+				}
+				tmp_vhost++;
+			}
 			*len = linklen;
 			return test_path(prefix, vhost, vhost_len, host, len, info, depth+1);
 		}
