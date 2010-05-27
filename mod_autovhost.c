@@ -158,10 +158,9 @@ static bool test_path(const char *prefix, const char *vhost, size_t vhost_len, c
 			tmp_vhost = *host;
 			while(*tmp_vhost != 0) {
 				if (*tmp_vhost == '/') {
-					size_t tmp_vhost_len = tmp_vhost - *host;
-					*len -= tmp_vhost_len + 1;
-					*tmp_vhost = 0;
-					tmp_vhost++;
+					(*(tmp_vhost++)) = 0;
+					size_t tmp_vhost_len = tmp_vhost - (*host);
+					(*len) -= tmp_vhost_len + 1;
 					return test_path(prefix, tmp_vhost, tmp_vhost_len, host, len, info, depth+1);
 				}
 				tmp_vhost++;
