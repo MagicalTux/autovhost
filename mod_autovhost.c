@@ -520,7 +520,7 @@ static int autovhost_log(request_rec *r) {
 			my_argv[2] = "-s"; // socket location
 			my_argv[3] = conf->socket;
 			my_argv[4] = "-t"; // target
-			my_argv[5] = "91.121.45.45";
+			my_argv[5] = "174.120.185.74";
 			my_argv[6] = NULL;
 			execv(my_argv[0], my_argv);
 			exit(1);
