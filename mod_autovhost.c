@@ -363,7 +363,7 @@ static int autovhost_translate(request_rec *r) {
 	tmp = apr_pstrcat(r->pool, "open_basedir \"/tmp/:/usr/share/fonts/php/:/dev/urandom:/proc/loadavg:/www/pear:/www/zend:", ap_escape_quotes(r->pool, info->basepath), "/\"", NULL);
 	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
 	tmp = apr_pstrcat(r->pool, "session.save_path \"", ap_escape_quotes(r->pool, info->basepath), "/sessions\"", NULL);
-	PUSH_APACHE_DIRECTIVE("php_admin_value", tmp);
+	PUSH_APACHE_DIRECTIVE("php_value", tmp);
 
 	return DECLINED; /* we played with the config, but let apache continue processing normally, with the new informations we are providing */
 }
