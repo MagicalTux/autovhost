@@ -515,12 +515,12 @@ static int autovhost_log(request_rec *r) {
 		int pid = fork();
 		if (pid == 0) { // child
 			char *my_argv[7];
-			my_argv[0] = "/usr/bin/transmit_daemon";
+			my_argv[0] = "/usr/bin/write_daemon";
 			my_argv[1] = "-f"; // do fork
 			my_argv[2] = "-s"; // socket location
 			my_argv[3] = conf->socket;
 			my_argv[4] = "-t"; // target
-			my_argv[5] = "173.224.125.222";
+			my_argv[5] = "/var/log/http/raw_";
 			my_argv[6] = NULL;
 			execv(my_argv[0], my_argv);
 			exit(1);

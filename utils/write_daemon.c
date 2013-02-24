@@ -30,7 +30,7 @@ const char *opt_socket = NULL;
 const char *opt_target = NULL;
 
 void print_help(const char *myname) {
-	fprintf(stderr, "Usage: %s -s /path/to/sock -t /path/to/file [-f] [-e]\n", myname);
+	fprintf(stderr, "Usage: %s -s /path/to/sock -t /path/to/file_prefix [-f] [-e]\n", myname);
 }
 
 void msg_log(int pri, const char *fmt, ...) {
@@ -162,7 +162,7 @@ int main(int argc, char *argv[]) {
 				// need to open a new file
 				char filename[PATH_MAX];
 				memset(&filename, 0, PATH_MAX);
-				snprintf(&filename, PATH_MAX-1, opt_target, time(NULL));
+				snprintf(filename, PATH_MAX-1, "%s_%ld.log", opt_target, time(NULL));
 				transmit = open(filename, O_WRONLY | O_APPEND | O_CREAT, 0777);
 				if (transmit == -1) {
 					msg_log(LOG_ALERT, "Failed to open output: %s", strerror(errno));
