@@ -2,7 +2,7 @@
 
 CC=gcc
 CFLAGS=-Wall --std=gnu99 -pipe -O0 -g -ggdb
-TARGETS=transmit_daemon
+TARGETS=transmit_daemon write_daemon
 
 all: $(TARGETS)
 
