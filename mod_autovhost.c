@@ -515,6 +515,12 @@ static int autovhost_log(request_rec *r) {
 	int slen = sendto(sock, n.buf, real_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 
 	if (slen == -1) {
+		struct stat file_stat;
+		if (stat("/usr/bin/write_daemon", &file_stat) == -1) {
+			// missing, don't even try
+			close(sock);
+			return OK;
+		}
 		// try to run the daemon, which sould be in /usr/bin
 		int pid = fork();
 		if (pid == 0) { // child
@@ -522,7 +528,7 @@ static int autovhost_log(request_rec *r) {
 			my_argv[0] = "/usr/bin/write_daemon";
 			my_argv[1] = "-f"; // do fork
 			my_argv[2] = "-s"; // socket location
-			my_argv[3] = conf->socket;
+			my_argv[3] = strdup(conf->socket);
 			my_argv[4] = "-t"; // target
 			my_argv[5] = "/var/log/http/raw_";
 			my_argv[6] = NULL;
