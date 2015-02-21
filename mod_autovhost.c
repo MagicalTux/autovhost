@@ -512,7 +512,7 @@ static int autovhost_log(request_rec *r) {
 	} */
 
 	int real_len = strlen(n.buf);
-	int slen = sendto(sock, n.buf, real_len, 0, &addr, sizeof(addr));
+	int slen = sendto(sock, n.buf, real_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 
 	if (slen == -1) {
 		// try to run the daemon, which sould be in /usr/bin
@@ -534,7 +534,7 @@ static int autovhost_log(request_rec *r) {
 			int status;
 			waitpid(pid, &status, 0); // wait for socket alloc
 			// retry transmission
-			slen = sendto(sock, n.buf, real_len, 0, &addr, sizeof(addr));
+			slen = sendto(sock, n.buf, real_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 		}
 		if (slen == -1) {
 			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to send log: %s", strerror(errno));
