@@ -48,21 +48,6 @@
 #define PACKAGE_VERSION "1.0"
 #define PACKAGE_STRING "mod_autovhost 1.0"
 
-#if 0
-// php stuff
-#include <stdlib.h>
-#include "zend.h"
-#include "zend_qsort.h"
-#include "zend_API.h"
-#include "zend_ini.h"
-#include "zend_alloc.h"
-#include "zend_operators.h"
-
-zend_alter_ini_entry("safe_mode", 9, "on", strlen("on"), 4, 16);
-zend_alter_ini_entry("open_basedir", 13, path, strlen(path), 4, 16);
-
-#endif
-
 module AP_MODULE_DECLARE_DATA autovhost_module;
 
 typedef struct autovhost_sconf_t {
@@ -574,7 +559,7 @@ static int autovhost_log(request_rec *r) {
 
 static void register_hooks(apr_pool_t *p) {
 	static const char * const aszPre[]={ "mod_alias.c","mod_userdir.c",NULL };
-	ap_hook_translate_name(autovhost_translate, aszPre, NULL, APR_HOOK_MIDDLE);
+	ap_hook_translate_name(autovhost_translate, aszPre, NULL, APR_HOOK_FIRST);
 	ap_hook_log_transaction(autovhost_log,NULL,NULL,APR_HOOK_MIDDLE);
 }
 
