@@ -268,6 +268,7 @@ void do_test(const char *host) {
 	(_p)->data = NULL; \
 	(_p)->filename = __FILE__; \
 	(_p)->line_num = __LINE__; \
+	(_p)->last = NULL; \
 } while(0)
 
 #define PUSH_APACHE_CONFIG(_s, _pool, _dir, _args) do { \
@@ -322,6 +323,7 @@ static int autovhost_translate(request_rec *r) {
 	parms.server = r->server;
 	parms.override = OR_ALL|ACCESS_CONF|RSRC_CONF;//(RSRC_CONF | OR_ALL) & ~(OR_AUTHCFG | OR_LIMIT);
 	parms.override_opts = OPT_ALL | OPT_SYM_OWNER | OPT_MULTI;
+	parms.override_list = NULL;
 	parms.path = __FILE__;
 	if (r->per_dir_config == NULL) {
 		r->per_dir_config = ap_create_per_dir_config(r->pool);
@@ -457,7 +459,7 @@ static int autovhost_log(request_rec *r) {
 	apr_table_addn(data_table, "now", apr_ltoa(r->pool, apr_time_now()));
 	apr_table_addn(data_table, "host", apr_table_get(orig->notes, "autovhost_host"));
 	apr_table_addn(data_table, "vhost", apr_table_get(orig->notes, "autovhost_vhost"));
-	apr_table_addn(data_table, "remote_ip", orig->connection->remote_ip);
+	apr_table_addn(data_table, "remote_ip", orig->connection->client_ip);
 	apr_table_addn(data_table, "local_ip", orig->connection->local_ip);
 	apr_table_addn(data_table, "local_port", apr_itoa(r->pool, orig->connection->local_addr->port));
 	apr_table_addn(data_table, "remote_logname", ap_get_remote_logname(orig));
