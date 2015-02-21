@@ -12,6 +12,12 @@
 #include <unistd.h>
 #include <sys/un.h>
 
+// Fix constants
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+
 #include "apr.h"
 #include "apr_strings.h"
 #include "apr_hooks.h"
@@ -31,6 +37,16 @@
 #include "http_log.h"
 
 #include "http_config.h"
+
+// Fix constants
+#undef PACKAGE_NAME
+#undef PACKAGE_STRING
+#undef PACKAGE_TARNAME
+#undef PACKAGE_VERSION
+#define PACKAGE_NAME "mod_autovhost"
+#define PACKAGE_TARNAME "mod_autovhost"
+#define PACKAGE_VERSION "1.0"
+#define PACKAGE_STRING "mod_autovhost 1.0"
 
 #if 0
 // php stuff
