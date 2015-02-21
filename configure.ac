@@ -4,7 +4,7 @@ AC_INIT([mod_autovhost], [1.0])
 # Automake initialization
 AM_INIT_AUTOMAKE
 
-AC_CONFIG_MACRO_DIRS([m4])
+AC_CONFIG_MACRO_DIR([m4])
 
 # Add a test for a compiler.
 AC_PROG_CC
