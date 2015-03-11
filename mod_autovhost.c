@@ -23,9 +23,6 @@
 #include "apr_hooks.h"
 #include "apr_lib.h"
 
-/* we are about to rape http_core. Let's get it undressed first */
-#define CORE_PRIVATE
-
 #define APR_WANT_STRFUNC
 #include "apr_want.h"
 
@@ -48,7 +45,7 @@
 #define PACKAGE_VERSION "1.0"
 #define PACKAGE_STRING "mod_autovhost 1.0"
 
-module AP_MODULE_DECLARE_DATA autovhost_module;
+AP_DECLARE_MODULE(autovhost);
 
 typedef struct autovhost_sconf_t {
 	const char *prefix;
